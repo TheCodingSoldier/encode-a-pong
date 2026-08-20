@@ -49,6 +49,10 @@ Scroll the encoder — you should see events.
 
 **`Ctrl+C` left the terminal weird?** Fixed — the game always calls `pygame.quit()` on exit.
 
+## Technical Docs
+
+For architecture details, optimization explanations, collision physics, memory analysis, and tunable constants, see [DOCUMENTATION.md](DOCUMENTATION.md).
+
 ## License
 
 **All Rights Reserved.** See [LICENSE](LICENSE).
