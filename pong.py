@@ -62,7 +62,6 @@ def reset_ball():
     )
     bvx = random.choice([-BALL_SPEED_X, BALL_SPEED_X])
     bvy = random.choice([-BALL_SPEED_Y, BALL_SPEED_Y])
-    # Ensure ball never has zero vertical velocity
     if bvy == 0:
         bvy = MIN_BALL_VY
     return ball, bvx, bvy
@@ -96,22 +95,17 @@ def bounce_ball(ball, paddle, bvx, bvy, is_player):
     """Handle ball-paddle collision: reverse x velocity, angle the ball
     based on where it hit the paddle, and push the ball outside the
     paddle to prevent it from getting stuck inside (tunneling/sticking).
-
-    The 'hit flag' pattern from the official pygame Pong tutorial
-    prevents multi-frame stuck collisions, but physically repositioning
-    the ball outside the paddle is more robust and doesn't require
-    a persistent state flag."""
-    # Calculate hit position: -1 at top edge, 0 at center, +1 at bottom
+    This physical-repositioning approach is more robust than the
+    'hit flag' pattern from the official pygame Pong tutorial, since it
+    doesn't rely on a persistent state flag that can desync."""
     hit = (ball.centery - paddle.centery) / (PADDLE_H / 2)
-    # Clamp hit to [-1, 1] to prevent extreme angles
-    hit = max(-1.0, min(1.0, hit))
+    hit = max(-1.0, min(1.0, hit))  # Clamp to prevent extreme angles
 
     bvx = -bvx
     bvy = int(hit * 3)
     if abs(bvy) < MIN_BALL_VY:
         bvy = MIN_BALL_VY if bvy >= 0 else -MIN_BALL_VY
 
-    # Push ball outside the paddle to prevent stuck-inside collisions
     if is_player:
         ball.x = paddle.right + 1
     else:
@@ -120,7 +114,7 @@ def bounce_ball(ball, paddle, bvx, bvy, is_player):
     return bvx, bvy
 
 
-def main():
+def run():
     pygame.init()
 
     screen = init_display()
@@ -131,21 +125,15 @@ def main():
     font = pygame.font.Font(None, 36)
     small_font = pygame.font.Font(None, 24)
 
-    # Pre-render static background surface (one blit replaces fill + loop)
     bg_surface = make_bg_surface()
 
     # Block all event types except the three we actually use.
-    # This prevents the ~128-event queue from filling with junk
-    # (MOUSEMOTION, ACTIVEEVENT, etc.) and dropping MOUSEWHEEL on
-    # fast encoder rotation.
     pygame.event.set_allowed(
         [pygame.QUIT, pygame.KEYDOWN, pygame.MOUSEWHEEL]
     )
 
-    # Pre-render static "Press R to restart" text
     r_text = small_font.render("Press R to restart", True, WHITE)
 
-    # Game state
     player_paddle = pygame.Rect(PLAYER_PADDLE_X, HEIGHT // 2 - PADDLE_H // 2, PADDLE_W, PADDLE_H)
     ai_paddle = pygame.Rect(AI_PADDLE_X, HEIGHT // 2 - PADDLE_H // 2, PADDLE_W, PADDLE_H)
     ball, bvx, bvy = reset_ball()
@@ -153,49 +141,40 @@ def main():
     ascore = 0
     game_over = False
     scroll_accum = 0.0
-    serve_timer = 0  # ms remaining before ball launches after a score
+    serve_timer = 0
 
-    # Score text caching — only re-render when score changes
     last_score = (-1, -1)
     score_surf = None
+    dt = 0  # Milliseconds since last frame; updated by clock.tick() each loop
 
     while True:
-        # Get milliseconds since last frame for serve timer
-        dt = clock.get_time() if clock.get_fps() > 0 else 1000 // FPS
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+                return
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    sys.exit()
+                    return
                 elif event.key == pygame.K_r and game_over:
                     pscore = ascore = 0
                     game_over = False
                     ball, bvx, bvy = reset_ball()
                     serve_timer = SERVE_DELAY_MS
-                    last_score = (-1, -1)  # Force score text re-render
+                    last_score = (-1, -1)
             elif event.type == pygame.MOUSEWHEEL:
                 scroll_accum += getattr(event, "preciseY", event.y)
 
         if not game_over:
-            # Apply accumulated scroll to paddle
             if scroll_accum != 0:
                 player_paddle.y -= int(scroll_accum * PADDLE_SPEED)
                 scroll_accum = 0.0
                 clamp_paddle(player_paddle)
 
-            # Serve delay — ball pauses at center after a score
             if serve_timer > 0:
                 serve_timer -= dt
             else:
-                # Ball physics
                 ball.x += bvx
                 ball.y += bvy
 
-                # Wall bounce (top/bottom) — reposition to exact edge
                 if ball.top <= 0:
                     ball.top = 0
                     bvy = -bvy
@@ -203,13 +182,11 @@ def main():
                     ball.bottom = HEIGHT
                     bvy = -bvy
 
-                # Paddle collision with tunneling prevention
                 if ball.colliderect(player_paddle) and bvx < 0:
                     bvx, bvy = bounce_ball(ball, player_paddle, bvx, bvy, is_player=True)
                 elif ball.colliderect(ai_paddle) and bvx > 0:
                     bvx, bvy = bounce_ball(ball, ai_paddle, bvx, bvy, is_player=False)
 
-                # Scoring
                 if ball.left <= 0:
                     ascore += 1
                     ball, bvx, bvy = reset_ball()
@@ -219,7 +196,6 @@ def main():
                     ball, bvx, bvy = reset_ball()
                     serve_timer = SERVE_DELAY_MS
 
-                # AI tracking with speed cap
                 if ai_paddle.centery < ball.centery:
                     ai_paddle.y += AI_SPEED
                 elif ai_paddle.centery > ball.centery:
@@ -234,11 +210,9 @@ def main():
         pygame.draw.rect(screen, WHITE, player_paddle)
         pygame.draw.rect(screen, WHITE, ai_paddle)
 
-        # Only draw the ball if it's moving (not during serve delay)
         if serve_timer <= 0 or game_over:
             pygame.draw.rect(screen, WHITE, ball)
 
-        # Cache score text — only re-render when score changes
         if (pscore, ascore) != last_score:
             score_surf = font.render(f"{pscore}  {ascore}", True, WHITE)
             last_score = (pscore, ascore)
@@ -251,7 +225,25 @@ def main():
             screen.blit(r_text, (WIDTH // 2 - r_text.get_width() // 2, HEIGHT // 2 + 20))
 
         pygame.display.flip()
-        clock.tick(FPS)
+        # clock.tick() both caps the framerate AND returns elapsed ms —
+        # this is the standard pygame idiom (see pygame newbieguide.md).
+        # The returned dt is used by the serve_timer at the top of the
+        # *next* iteration.
+        dt = clock.tick(FPS)
+
+
+def main():
+    """Entry point with graceful Ctrl+C / SIGINT handling. Running headless
+    on a Pi console, an uncaught KeyboardInterrupt would dump a traceback;
+    this ensures pygame always shuts down cleanly and releases the
+    display/input devices."""
+    try:
+        run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        pygame.quit()
+    sys.exit(0)
 
 
 if __name__ == "__main__":
