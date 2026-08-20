@@ -73,8 +73,7 @@ def init_display():
 
     Uses pygame.version.vernum to check for SCALED support (added in
     pygame 2.0.0) before attempting to use it. This avoids an
-    AttributeError crash on pygame 1.x — the official pygame version-
-    checking idiom from pygame.version docs.
+    AttributeError crash on pygame 1.x.
 
     Tries SCALED + vsync first, falls back to SCALED alone, then to
     plain set_mode(). The game always starts."""
@@ -84,16 +83,13 @@ def init_display():
                 (WIDTH, HEIGHT), pygame.SCALED, vsync=1
             )
         except (pygame.error, TypeError):
-            # TypeError: vsync param not supported in this pygame build
             try:
                 screen = pygame.display.set_mode(
                     (WIDTH, HEIGHT), pygame.SCALED
                 )
             except pygame.error:
-                # SCALED rejected by Pi framebuffer / driver
                 screen = pygame.display.set_mode((WIDTH, HEIGHT))
     else:
-        # Pygame 1.x: SCALED and vsync don't exist
         screen = pygame.display.set_mode((WIDTH, HEIGHT))
     return screen
 
@@ -109,12 +105,9 @@ def clamp_paddle(paddle):
 def bounce_ball(ball, paddle, bvx, bvy, is_player):
     """Handle ball-paddle collision: reverse x velocity, angle the ball
     based on where it hit the paddle, and push the ball outside the
-    paddle to prevent it from getting stuck inside (tunneling/sticking).
-    This physical-repositioning approach is more robust than the
-    'hit flag' pattern from the official pygame Pong tutorial, since it
-    doesn't rely on a persistent state flag that can desync."""
+    paddle to prevent it from getting stuck inside (tunneling/sticking)."""
     hit = (ball.centery - paddle.centery) / (PADDLE_H / 2)
-    hit = max(-1.0, min(1.0, hit))  # Clamp to prevent extreme angles
+    hit = max(-1.0, min(1.0, hit))
 
     bvx = -bvx
     bvy = int(hit * 3)
@@ -142,10 +135,6 @@ def run():
 
     bg_surface = make_bg_surface()
 
-    # Block all event types except the three we actually use.
-    # This prevents the ~128-event queue from filling with junk
-    # (MOUSEMOTION, ACTIVEEVENT, etc.) and dropping MOUSEWHEEL on
-    # fast encoder rotation.
     pygame.event.set_allowed(
         [pygame.QUIT, pygame.KEYDOWN, pygame.MOUSEWHEEL]
     )
@@ -161,10 +150,9 @@ def run():
     scroll_accum = 0.0
     serve_timer = 0
 
-    # Score text caching — only re-render when score changes
     last_score = (-1, -1)
     score_surf = None
-    dt = 0  # Milliseconds since last frame; updated by clock.tick() each loop
+    dt = 0
 
     while True:
         for event in pygame.event.get():
@@ -224,7 +212,6 @@ def run():
                 if pscore >= WIN_SCORE or ascore >= WIN_SCORE:
                     game_over = True
 
-        # ---- Render ----
         screen.blit(bg_surface, (0, 0))
         pygame.draw.rect(screen, WHITE, player_paddle)
         pygame.draw.rect(screen, WHITE, ai_paddle)
@@ -243,15 +230,14 @@ def run():
             screen.blit(w_surf, (WIDTH // 2 - w_surf.get_width() // 2, HEIGHT // 2 - 20))
             screen.blit(r_text, (WIDTH // 2 - r_text.get_width() // 2, HEIGHT // 2 + 20))
 
-        pygame.display.flip()
+        # display.update() is optimized for software framebuffer displays
+        # (per pygame docs). Functionally identical to flip() with no args,
+        # but the recommended path for the Pi's framebuffer driver.
+        pygame.display.update()
         dt = clock.tick(FPS)
 
 
 def main():
-    """Entry point with graceful Ctrl+C / SIGINT handling. Running headless
-    on a Pi console, an uncaught KeyboardInterrupt would dump a traceback;
-    this ensures pygame always shuts down cleanly and releases the
-    display/input devices."""
     try:
         run()
     except KeyboardInterrupt:
