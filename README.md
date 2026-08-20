@@ -44,7 +44,7 @@ Every optimization is specifically tuned for the Pi Zero 2 W's single-core ARM C
 
 ### Display
 - **`pygame.SCALED` + `vsync=1`** instead of the obsolete `HWSURFACE` flag (non-functional since Pygame 2.0.0). Vsync syncs to the display refresh, eliminating screen tearing and preventing wasted CPU cycles from rendering faster than the panel can show.
-- **Fallback mode**: If the Pi's framebuffer rejects `SCALED`, the game falls back to a plain `set_mode()` so it still runs.
+- **Triple fallback**: If `vsync` isn't supported (older pygame), falls back to `SCALED` alone. If `SCALED` is rejected by the Pi's framebuffer, falls back to plain `set_mode()`. The game always starts.
 - **Mouse cursor hidden** (`pygame.mouse.set_visible(False)`) — no cursor is needed since the encoder is the only input, and hiding it skips a per-frame blit.
 
 ### Rendering
@@ -59,8 +59,24 @@ Every optimization is specifically tuned for the Pi Zero 2 W's single-core ARM C
 - **Font objects created once**: `pygame.font.Font` construction is expensive; both font sizes are created at startup and reused.
 
 ### Code Structure
+- `init_display()` helper with triple fallback for maximum Pi compatibility.
 - `reset_ball()` helper to avoid duplicating ball-reset logic in 3 places.
+- `make_bg_surface()` caches the static background once at startup.
 - All tunable constants at the top of the file for easy adjustment.
+
+## Troubleshooting
+
+### Game window is blank / invisible
+This should not happen with the current code, but if you previously had issues: do NOT set `SDL_VIDEODRIVER=offscreen` — that renders to a virtual buffer with no visible output. On Raspberry Pi OS desktop, the default `x11` driver works fine. On Pi OS Lite (console-only), you need `kmsdrm` (not `fbcon`, which doesn't exist in SDL2).
+
+### `pygame.error: video system not initialized`
+Make sure you're running from the desktop (X11) or have KMSDRM enabled via `raspi-config` → Advanced Options → GL Driver → GL (Fake KMS).
+
+### MOUSEWHEEL events not registering
+Verify your encoder's `uinput` service is running and emitting scroll events:
+```bash
+sudo evtest /dev/input/eventX   # find your encoder's event device
+```
 
 ## License
 

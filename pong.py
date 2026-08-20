@@ -10,7 +10,6 @@ Requires: python3-pygame
 Run: python3 pong.py
 """
 
-import os
 import sys
 import random
 import pygame
@@ -23,8 +22,8 @@ FPS = 30
 PADDLE_W, PADDLE_H = 8, 50
 BALL_SIZE = 8
 WIN_SCORE = 7
-PADDLE_SPEED = 12
-AI_SPEED = 2
+PADDLE_SPEED = 12              # Pixels per scroll tick
+AI_SPEED = 2                   # AI paddle max pixels per frame
 BALL_SPEED_X = 3
 BALL_SPEED_Y = 2
 
@@ -58,20 +57,27 @@ def reset_ball():
     return ball, bvx, bvy
 
 
-def main():
-    pygame.init()
-
-    # Pygame >= 2.0: HWSURFACE is non-functional. Use SCALED + vsync=1
-    # for a hardware-friendly path on the Pi framebuffer. vsync syncs
-    # to the display refresh, eliminating tearing and saving CPU cycles.
+def init_display():
+    """Initialize the display with the best available mode for the Pi.
+    Tries SCALED + vsync first (Pygame >= 2.0), falls back to plain mode
+    if the Pi's framebuffer rejects SCALED."""
     try:
         screen = pygame.display.set_mode(
             (WIDTH, HEIGHT), pygame.SCALED, vsync=1
         )
-    except pygame.error:
-        # Fallback for framebuffer setups that reject SCALED
-        screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    except (pygame.error, TypeError):
+        # TypeError if pygame version doesn't support vsync param
+        try:
+            screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.SCALED)
+        except pygame.error:
+            screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    return screen
 
+
+def main():
+    pygame.init()
+
+    screen = init_display()
     pygame.display.set_caption("Encode-A-Pong")
     pygame.mouse.set_visible(False)
 
