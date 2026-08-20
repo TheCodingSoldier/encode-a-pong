@@ -23,6 +23,12 @@ The game uses `preciseY` (float precision, pygame >= 2.1.3) with a scroll accumu
 sudo apt install python3-pygame
 ```
 
+Or via pip (recommended version >= 2.0.0 for SCALED + vsync support):
+
+```bash
+pip install -r requirements.txt
+```
+
 ## Run
 
 ```bash
@@ -49,13 +55,18 @@ Press `Ctrl+C` in the terminal or `ESC` in-game to quit cleanly — both are han
 - Ball is hidden during serve delay for a clean visual reset
 - Ball never goes perfectly horizontal (minimum vertical velocity enforced)
 
+## Compatibility
+
+The game works on **pygame 1.x and 2.x**. It checks `pygame.version.vernum` before using the `SCALED` flag (added in 2.0.0) to avoid an `AttributeError` crash on older installs. On pygame 1.x, it falls back to plain `set_mode()`. On pygame 2.x, it tries `SCALED + vsync`, then `SCALED` alone, then plain mode — the game always starts.
+
 ## Optimization Details
 
 Every optimization is specifically tuned for the Pi Zero 2 W's single-core ARM CPU and the Kuman 3.5" framebuffer:
 
 ### Display
 - **`pygame.SCALED` + `vsync=1`** instead of the obsolete `HWSURFACE` flag (non-functional since Pygame 2.0.0). Vsync syncs to the display refresh, eliminating tearing and preventing wasted CPU cycles.
-- **Triple fallback**: If `vsync` isn't supported (older pygame), falls back to `SCALED` alone. If `SCALED` is rejected by the Pi's framebuffer, falls back to plain `set_mode()`. The game always starts.
+- **Version-guarded**: `pygame.version.vernum >= (2, 0, 0)` check before accessing `pygame.SCALED` prevents `AttributeError` on pygame 1.x.
+- **Triple fallback**: If `vsync` isn't supported, falls back to `SCALED` alone. If `SCALED` is rejected by the Pi's framebuffer, falls back to plain `set_mode()`. The game always starts.
 - **Mouse cursor hidden** — no cursor is needed since the encoder is the only input.
 
 ### Rendering
@@ -64,7 +75,7 @@ Every optimization is specifically tuned for the Pi Zero 2 W's single-core ARM C
 - **Score text caching**: Score is only re-rendered when it actually changes.
 - **Ball hidden during serve delay**: Skips a `draw.rect` call when ball is waiting to launch.
 - **Minimal draw calls**: Only 3-4 `pygame.draw.rect()` calls per frame.
-- **30 FPS cap** via `clock.tick(FPS)`, which both caps the framerate and returns elapsed milliseconds — the standard pygame idiom, used directly as `dt` for the serve timer instead of a separate `get_time()`/`get_fps()` check.
+- **30 FPS cap** via `clock.tick(FPS)`, which both caps the framerate and returns elapsed milliseconds — the standard pygame idiom, used directly as `dt` for the serve timer.
 
 ### Event Handling
 - **`pygame.event.set_allowed()`**: Blocks all event types except `QUIT`, `KEYDOWN`, and `MOUSEWHEEL`. Prevents the ~128-event queue from filling with junk and dropping scroll events during fast encoder spins.
@@ -82,7 +93,7 @@ Every optimization is specifically tuned for the Pi Zero 2 W's single-core ARM C
 - **Graceful `Ctrl+C`**: `run()` is wrapped in a `try/except KeyboardInterrupt` inside `main()`, with `pygame.quit()` called in a `finally` block. Interrupting the script from the terminal (e.g. via SSH) exits cleanly instead of dumping a traceback and potentially leaving the display in a bad state.
 
 ### Code Structure
-- `init_display()` — triple fallback display initialization.
+- `init_display()` — version-guarded triple fallback display initialization.
 - `reset_ball()` — centralized ball reset with velocity guarantees.
 - `make_bg_surface()` — caches static background once.
 - `clamp_paddle()` — reusable paddle bounds enforcement.
@@ -119,6 +130,9 @@ This should not happen — `bounce_ball()` repositions the ball outside the padd
 
 ### Ctrl+C leaves the terminal in a weird state
 This is handled: `main()` always calls `pygame.quit()` in a `finally` block before exiting, even on `KeyboardInterrupt`.
+
+### AttributeError: module 'pygame' has no attribute 'SCALED'
+This should not happen — the code checks `pygame.version.vernum >= (2, 0, 0)` before accessing `pygame.SCALED`. If you see this, you're on pygame 1.x and the version check failed somehow.
 
 ## License
 

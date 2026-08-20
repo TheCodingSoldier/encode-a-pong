@@ -4,7 +4,8 @@ Encode-A-Pong — Pong controlled by mouse scroll wheel.
 Optimized for Raspberry Pi Zero 2 W + Kuman 3.5" display (480x320).
 
 Target: Raspberry Pi OS (Debian Trixie), Pi Zero 2 W (1 GHz ARM Cortex-A53).
-Pygame >= 2.0.0 (HWSURFACE is non-functional since 2.0; use SCALED + vsync).
+Pygame >= 2.0.0 recommended (uses SCALED + vsync; falls back gracefully
+on older versions).
 
 Requires: python3-pygame
 Run: python3 pong.py
@@ -69,17 +70,31 @@ def reset_ball():
 
 def init_display():
     """Initialize the display with the best available mode for the Pi.
-    Tries SCALED + vsync first (Pygame >= 2.0), falls back to plain mode
-    if the Pi's framebuffer rejects SCALED or vsync isn't supported."""
-    try:
-        screen = pygame.display.set_mode(
-            (WIDTH, HEIGHT), pygame.SCALED, vsync=1
-        )
-    except (pygame.error, TypeError):
+
+    Uses pygame.version.vernum to check for SCALED support (added in
+    pygame 2.0.0) before attempting to use it. This avoids an
+    AttributeError crash on pygame 1.x — the official pygame version-
+    checking idiom from pygame.version docs.
+
+    Tries SCALED + vsync first, falls back to SCALED alone, then to
+    plain set_mode(). The game always starts."""
+    if pygame.version.vernum >= (2, 0, 0):
         try:
-            screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.SCALED)
-        except pygame.error:
-            screen = pygame.display.set_mode((WIDTH, HEIGHT))
+            screen = pygame.display.set_mode(
+                (WIDTH, HEIGHT), pygame.SCALED, vsync=1
+            )
+        except (pygame.error, TypeError):
+            # TypeError: vsync param not supported in this pygame build
+            try:
+                screen = pygame.display.set_mode(
+                    (WIDTH, HEIGHT), pygame.SCALED
+                )
+            except pygame.error:
+                # SCALED rejected by Pi framebuffer / driver
+                screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    else:
+        # Pygame 1.x: SCALED and vsync don't exist
+        screen = pygame.display.set_mode((WIDTH, HEIGHT))
     return screen
 
 
@@ -128,6 +143,9 @@ def run():
     bg_surface = make_bg_surface()
 
     # Block all event types except the three we actually use.
+    # This prevents the ~128-event queue from filling with junk
+    # (MOUSEMOTION, ACTIVEEVENT, etc.) and dropping MOUSEWHEEL on
+    # fast encoder rotation.
     pygame.event.set_allowed(
         [pygame.QUIT, pygame.KEYDOWN, pygame.MOUSEWHEEL]
     )
@@ -143,6 +161,7 @@ def run():
     scroll_accum = 0.0
     serve_timer = 0
 
+    # Score text caching — only re-render when score changes
     last_score = (-1, -1)
     score_surf = None
     dt = 0  # Milliseconds since last frame; updated by clock.tick() each loop
@@ -225,10 +244,6 @@ def run():
             screen.blit(r_text, (WIDTH // 2 - r_text.get_width() // 2, HEIGHT // 2 + 20))
 
         pygame.display.flip()
-        # clock.tick() both caps the framerate AND returns elapsed ms —
-        # this is the standard pygame idiom (see pygame newbieguide.md).
-        # The returned dt is used by the serve_timer at the top of the
-        # *next* iteration.
         dt = clock.tick(FPS)
 
 
