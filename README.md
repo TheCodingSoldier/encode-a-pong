@@ -1,6 +1,6 @@
 # Encode-A-Pong
 
-Pong controlled by a rotary encoder. Built for Raspberry Pi Zero 2 W.
+Pong controlled by a rotary encoder. Mainly Built for Raspberry Pi Zero 2 W.
 
 ## Quick Start
 
